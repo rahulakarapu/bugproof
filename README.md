@@ -11,11 +11,16 @@ proven to fail on the bug *and* pass on the fix *and* fail again when the bug is
 reintroduced.
 
 ```
-┌── fetch ──┐   ┌── scaffold ──┐   ┌─ RED ─┐   ┌─ fix ─┐   ┌─ GREEN ─┐   ┌─ GUARD ─┐   ┌─ commit ─┐
-│  ticket → │ → │  spec stub → │ → │ must  │ → │ apply │ → │  must   │ → │  must   │ → │ evidence │
-│ repro plan│   │ (agent fills)│   │ fail  │   │  fix  │   │  pass   │   │  fail   │   │ + guard  │
+┌── fetch ──┐   ┌── scaffold ──┐   ┌─ RED ─┐   ┌─ fix ─┐   ┌─ GREEN ─┐   ┌─ GUARD ─┐   ┌─── pr ───┐
+│  ticket → │ → │  spec stub → │ → │ must  │ → │ agent │ → │  must   │ → │  must   │ → │ test+fix │
+│ repro plan│   │ (agent fills)│   │ fail  │   │ edits │   │  pass   │   │  fail   │   │ +evidence│
 └───────────┘   └──────────────┘   └───────┘   └───────┘   └─────────┘   └─────────┘   └──────────┘
+                                   fix absent              fix applied   fix removed
 ```
+
+The fix is the variable across phases. `green` runs with the agent's fix in the
+working tree; `red` and `guard` lift it out as a patch and restore it afterwards,
+so guard genuinely tests that *the fix* is what makes the test pass.
 
 ## Why the guard phase exists
 
@@ -39,32 +44,40 @@ locator can never masquerade as a reproduction.
 npm install
 npx playwright install chromium
 
-# Run the whole cycle against a bundled bug report
-bugproof fetch tax-rounding
-bugproof scaffold tax-rounding      # writes tests/regression/tax-rounding.spec.ts
-# ...agent implements the spec...
-bugproof verify tax-rounding --phase all
-bugproof evidence tax-rounding      # add --post to comment on the ticket
-bugproof commit tax-rounding
+# Turn a GitHub issue into a verified fix + regression test
+bugproof fetch 2
+bugproof scaffold gh-2              # writes tests/regression/gh-2.spec.ts
+# ...agent implements the spec, confirms red, then writes the source fix...
+bugproof verify gh-2 --phase all
+bugproof evidence gh-2 --post       # evidence onto the ticket
+bugproof pr gh-2                    # branch + PR with the test and the fix
 ```
 
 Output of the full cycle:
 
 ```
-RED — prove the bug — defect armed, test must fail at its repro assertion
-  arming: tax-rounding
+› source fix detected in 1 file(s): app/public/ui.js
+
+RED — prove the bug — defect present, test must fail at its repro assertion
+  source fix: set aside
 ✓ reproduced — run failed, failure class: repro
 
-GREEN — prove the fix — defect disarmed, test must pass
-  arming: none (all defects disarmed)
+GREEN — prove the fix — fix applied, test must pass
+  source fix: applied
 ✓ fixed — run passed
 
-GUARD — prove the guard — defect re-armed, test must fail again
-  arming: tax-rounding
+GUARD — prove the guard — fix removed, test must fail again
+  source fix: set aside
 ✓ guarding — run failed, failure class: repro
+  Removing the fix brought the failure back, so the test will catch this regression.
 
 ✓ certified — the test fails on the bug, passes on the fix, and catches the bug returning
 ```
+
+Then `bugproof pr gh-2` opens a pull request containing both commits and the
+evidence report, leaving `main` untouched:
+[example PR](https://github.com/rahulakarapu/bugproof/pull/3) from
+[issue #2](https://github.com/rahulakarapu/bugproof/issues/2).
 
 ## How it works
 
@@ -97,12 +110,31 @@ classify the failure:
 
 Only `repro` can certify a red or guard phase.
 
-### Arming defects
+### Two strategies
 
-The demo storefront (`app/`) carries three seeded defects, each a single branch in
-`app/public/cart.js` guarded by `bugs.has('<id>')` and armed at runtime via
-`BUGPROOF_BUGS`. That makes red/green/guard deterministic and replayable without
-rewriting source between phases:
+`verify` picks a strategy based on whether a fix exists, and says which one it
+used, because a guard verdict means different things under each:
+
+| Strategy | When | What varies across phases | Guard proves |
+| --- | --- | --- | --- |
+| `source` | A fix sits in the working tree | The fix itself | The fix is what makes the test pass |
+| `toggle` | No fix written yet | A seeded defect flag | Only that the test is not flaky |
+
+Under `source`, the fix is captured as a patch and lifted out for red and guard,
+then restored — verified byte-for-byte, and a restore that cannot be confirmed is
+a hard error rather than a warning, since losing an uncommitted fix is worse than
+failing the run.
+
+Under `toggle`, red and guard run byte-identical inputs, so the report carries an
+explicit caveat rather than claiming the fix was tested.
+
+### The demo storefront
+
+`app/` carries two kinds of defect on purpose.
+
+Three are **seeded**: single branches in `app/public/cart.js` guarded by
+`bugs.has('<id>')` and armed at runtime via `BUGPROOF_BUGS`, which makes the
+toggle strategy deterministic without rewriting source:
 
 | Id | Symptom |
 | --- | --- |
@@ -111,8 +143,16 @@ rewriting source between phases:
 | `coupon-case-sensitive` | A valid code typed in lowercase is rejected as invalid |
 | `qty-zero-ghost` | A line set to quantity 0 vanishes but is still billed |
 
-For a real codebase there is nothing to arm: red runs against the unfixed source,
-green against the fixed source, and the operator applies the fix between phases.
+One is **real and unguarded**: the per-line price in `app/public/ui.js` renders
+the unit price instead of unit price × quantity. It is genuine source with a
+genuine one-line fix, deliberately left uncovered by the unit tests and the
+committed guards, so the `source` strategy has something authentic to work on.
+Because `bugproof pr` never merges, `main` stays reproducibly broken and the
+whole cycle can be demoed again from a clean slate.
+
+For a real codebase there are no seeded defects at all: red and guard run against
+the unfixed source and green against the fixed source, which is exactly what the
+`source` strategy does.
 
 ### Evidence
 
@@ -129,7 +169,8 @@ output, and links to the artifacts.
 | `bugproof scaffold <id>` | Generate the spec skeleton |
 | `bugproof verify <id> --phase red\|green\|guard\|all` | Run a phase and judge it |
 | `bugproof evidence <id> [--post]` | Render the evidence report |
-| `bugproof commit <id>` | Commit the certified guard |
+| `bugproof pr <id>` | Open a PR with the test and the fix, leaving the base branch untouched |
+| `bugproof commit <id>` | Commit the certified guard to the current branch |
 | `bugproof status <id>` | Replay the recorded cycle |
 | `bugproof list` | Show fetched tickets and cycle state |
 | `bugproof bugs` | List the seeded defects |
@@ -153,11 +194,12 @@ appearing to work.
 app/                      Demo storefront with runtime-armable defects
 src/
   cli.ts                  Command surface
-  commands/               fetch, scaffold, verify, evidence, commit, status
+  commands/               fetch, scaffold, verify, evidence, pr, commit, status
   core/
     ticket.ts             Prose bug report → structured repro plan
     runner.ts             Playwright invocation + failure classification
     verdict.ts            Verdict engine
+    fix.ts                Capture/remove/restore the working-tree fix
     journal.ts            Durable cycle state
     evidence.ts           Trace collection + ticket report
     bugs.ts               Seeded defect registry

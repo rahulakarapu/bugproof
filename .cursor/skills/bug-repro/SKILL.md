@@ -71,12 +71,16 @@ the **Verdicts** table for what each result means.
 
 ### 5. Apply the fix
 
-Only after red is `reproduced`. Change the source so the reported behaviour is
-correct. For seeded defects in the demo app the CLI disarms them automatically, so
-no source edit is needed; for real defects, edit the code.
+Only after red is `reproduced`. Edit the source so the reported behaviour is
+correct, and leave the change uncommitted in the working tree — `verify` detects
+it automatically and switches to the source strategy.
 
 Do not touch the spec during this step. Changing the test and the source together
 makes the green result meaningless.
+
+If you write no fix, the cycle falls back to toggling a seeded defect flag. That
+still validates the test, but guard then re-runs red's exact inputs and proves
+only that the test is not flaky. Prefer a real fix.
 
 ### 6. GREEN — prove the fix
 
@@ -84,8 +88,8 @@ makes the green result meaningless.
 bugproof verify <ticketId> --phase green
 ```
 
-Required verdict: `fixed`. A verdict of `unfixed` means the fix is incomplete —
-revisit the source, not the test.
+Runs with the fix applied. Required verdict: `fixed`. A verdict of `unfixed`
+means the fix is incomplete — revisit the source, not the test.
 
 ### 7. GUARD — prove the guard
 
@@ -93,16 +97,27 @@ revisit the source, not the test.
 bugproof verify <ticketId> --phase guard
 ```
 
-Reintroduces the defect and requires the test to fail again, which is what proves
-the spec is a real detector rather than a test that happens to pass. Required
-verdict: `guarding`.
+Lifts the fix back out of the tree as a patch, requires the test to fail again,
+then restores it. This is what proves the spec is a real detector rather than a
+test that happens to pass. Required verdict: `guarding`.
 
-### 8. Publish evidence and commit
+Phases 4 through 7 can be run in one shot with `--phase all` once the fix is in
+the working tree.
+
+### 8. Publish evidence and open a pull request
 
 ```bash
 bugproof evidence <ticketId> --post   # trace/screenshot report onto the ticket
-bugproof commit <ticketId>            # refuses unless the cycle is certified
+bugproof pr <ticketId>                # branch + PR with the test and the fix
 ```
+
+`bugproof pr` cuts a branch, commits the test and the fix as two commits in
+red-then-green order, opens a pull request carrying the evidence report, and
+returns to the base branch so it is never modified. The fix leaves your working
+tree because it becomes a commit on the pushed branch.
+
+Never merge the pull request yourself. Use `bugproof commit` instead only when
+the guard is meant to land directly on the current branch.
 
 ## Writing the spec
 
@@ -181,6 +196,16 @@ Each phase requires one verdict to continue. Everything else is diagnostic.
 A re-run of red discards the recorded green and guard verdicts, because they no
 longer describe the current spec.
 
+## Strategies
+
+`verify` reports which strategy it used, and the distinction matters when reading
+a guard verdict:
+
+| Strategy | When | What varies | Guard proves |
+| --- | --- | --- | --- |
+| `source` | A fix is in the working tree | The fix, lifted out for red and guard | The fix is what makes the test pass |
+| `toggle` | No fix written yet | A seeded defect flag | Only that the test is not flaky |
+
 ## Reference
 
 - Demo app markup, test ids, and seeded defects: [demo-app.md](demo-app.md)
@@ -188,3 +213,5 @@ longer describe the current spec.
   phase that misses its required verdict.
 - `bugproof status <id>` replays the recorded cycle without re-running anything.
 - `bugproof bugs` lists the seeded defects available in the demo app.
+- `bugproof verify <id> --ignore-fix` forces the toggle strategy even when a fix
+  is present.
