@@ -36,6 +36,14 @@ export const SEEDED_BUGS: readonly SeededBug[] = [
     rootCause: 'Coupon apply handler never checks whether the code is already present.',
   },
   {
+    id: 'coupon-case-sensitive',
+    title: 'Lowercase coupon codes are rejected as invalid',
+    area: 'coupons',
+    symptom:
+      'A valid code typed in lowercase is rejected with "not a valid coupon code" instead of being applied.',
+    rootCause: 'Coupon lookup skips normalising the entered code to upper case.',
+  },
+  {
     id: 'qty-zero-ghost',
     title: 'Setting quantity to zero leaves the item in the subtotal',
     area: 'cart line items',

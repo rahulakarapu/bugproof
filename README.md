@@ -108,6 +108,7 @@ rewriting source between phases:
 | --- | --- |
 | `tax-rounding` | Tax truncated instead of rounded, so the total can be a cent low |
 | `coupon-restack` | The same coupon code can be applied more than once |
+| `coupon-case-sensitive` | A valid code typed in lowercase is rejected as invalid |
 | `qty-zero-ghost` | A line set to quantity 0 vanishes but is still billed |
 
 For a real codebase there is nothing to arm: red runs against the unfixed source,

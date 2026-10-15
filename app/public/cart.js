@@ -52,9 +52,12 @@ export function billableLines(lines, bugs) {
  *
  * BUG coupon-restack: the already-applied check is skipped, so submitting the
  * same code twice stacks the discount.
+ *
+ * BUG coupon-case-sensitive: the entered code is not upper-cased before lookup,
+ * so a valid code typed in lowercase is reported as invalid.
  */
 export function applyCoupon(coupons, rawCode, bugs) {
-  const code = rawCode.trim().toUpperCase();
+  const code = bugs.has('coupon-case-sensitive') ? rawCode.trim() : rawCode.trim().toUpperCase();
 
   if (!code) {
     return { coupons, error: 'Enter a coupon code.' };

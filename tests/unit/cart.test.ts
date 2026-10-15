@@ -50,6 +50,20 @@ describe('coupon-restack', () => {
   });
 });
 
+describe('coupon-case-sensitive', () => {
+  it('rejects a lowercase code when armed', () => {
+    const result = applyCoupon([], 'save10', armed('coupon-case-sensitive'));
+    assert.deepEqual(result.coupons, []);
+    assert.match(result.error ?? '', /not a valid coupon/);
+  });
+
+  it('accepts a lowercase code when disarmed', () => {
+    const result = applyCoupon([], 'save10', disarmed);
+    assert.deepEqual(result.coupons, ['SAVE10']);
+    assert.equal(result.error, null);
+  });
+});
+
 describe('qty-zero-ghost', () => {
   const zeroedMug = [lamp, { ...mug, qty: 0 }];
 

@@ -39,6 +39,7 @@ variable at startup and injects it into the page.
 | --- | --- |
 | `tax-rounding` | Tax truncated instead of rounded, so the total can be a cent low |
 | `coupon-restack` | The same coupon code can be applied more than once |
+| `coupon-case-sensitive` | A valid code typed in lowercase is rejected as invalid |
 | `qty-zero-ghost` | A line set to quantity 0 vanishes but is still billed for one unit |
 
 Run the app manually with a defect armed:
