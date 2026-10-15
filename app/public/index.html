@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind Supply — Cart</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      // The quoted token is replaced with a JSON array at serve time. It must not
+      // contain the variable name, or the substitution would rewrite that instead.
+      window.__ARMED_BUGS__ = "%%BUGPROOF_ARMED%%";
+    </script>
+  </head>
+  <body>
+    <header>
+      <h1>Northwind Supply</h1>
+      <p class="tagline">Demo storefront for Bugproof regression runs</p>
+    </header>
+
+    <main>
+      <section class="panel" aria-labelledby="catalog-heading">
+        <h2 id="catalog-heading">Catalog</h2>
+        <ul class="catalog" data-testid="catalog"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="cart-heading">
+        <h2 id="cart-heading">Your cart</h2>
+
+        <ul class="lines" data-testid="cart-lines"></ul>
+        <p class="empty" data-testid="cart-empty">Your cart is empty.</p>
+
+        <form class="coupon" data-testid="coupon-form" autocomplete="off">
+          <label for="coupon-input">Coupon code</label>
+          <div class="coupon-row">
+            <input id="coupon-input" data-testid="coupon-input" placeholder="SAVE10" />
+            <button type="submit" data-testid="coupon-apply">Apply</button>
+          </div>
+          <p class="error" data-testid="coupon-error" role="alert" hidden></p>
+          <ul class="applied" data-testid="applied-coupons"></ul>
+        </form>
+
+        <dl class="summary">
+          <div><dt>Subtotal</dt><dd data-testid="subtotal">$0.00</dd></div>
+          <div><dt>Discount</dt><dd data-testid="discount">$0.00</dd></div>
+          <div><dt>Tax</dt><dd data-testid="tax">$0.00</dd></div>
+          <div class="grand"><dt>Total</dt><dd data-testid="total">$0.00</dd></div>
+        </dl>
+      </section>
+    </main>
+
+    <footer>
+      <span data-testid="armed-bugs-label"></span>
+    </footer>
+
+    <script type="module" src="/ui.js"></script>
+  </body>
+</html>
