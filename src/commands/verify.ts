@@ -91,7 +91,7 @@ async function runPhase(
   const outcome =
     fix && !plan.fixPresent ? await withFixRemoved(fix, execute) : await execute();
 
-  const { verdict, ok, reason } = judge(phase, outcome);
+  const { verdict, ok, reason } = judge(phase, outcome, journal.strategy);
 
   const line = `${verdict} — run ${outcome.status}${
     outcome.classification !== 'none' ? `, failure class: ${outcome.classification}` : ''

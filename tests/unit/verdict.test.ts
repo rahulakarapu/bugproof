@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { bugsForPhase } from '../../src/commands/verify.ts';
+import { bugsForPhase, phasePlan } from '../../src/commands/verify.ts';
 import { classifyFailure } from '../../src/core/runner.ts';
 import type { FailureClass, RunOutcome, RunStatus } from '../../src/core/types.ts';
 import { judge } from '../../src/core/verdict.ts';
@@ -121,5 +121,71 @@ describe('bugsForPhase', () => {
 
   it('arms nothing when the ticket maps to no seeded defect', () => {
     assert.deepEqual(bugsForPhase('red', null), []);
+  });
+});
+
+describe('phasePlan', () => {
+  it('varies the fix and holds arming constant when a source fix exists', () => {
+    // The fix is the only variable, so green is the one phase that differs.
+    assert.deepEqual(phasePlan('red', 'tax-rounding', true), {
+      armedBugs: ['tax-rounding'],
+      fixPresent: false,
+    });
+    assert.deepEqual(phasePlan('green', 'tax-rounding', true), {
+      armedBugs: ['tax-rounding'],
+      fixPresent: true,
+    });
+    assert.deepEqual(phasePlan('guard', 'tax-rounding', true), {
+      armedBugs: ['tax-rounding'],
+      fixPresent: false,
+    });
+  });
+
+  it('needs no seeded defect when a source fix exists', () => {
+    assert.deepEqual(phasePlan('green', null, true), { armedBugs: [], fixPresent: true });
+    assert.deepEqual(phasePlan('red', null, true), { armedBugs: [], fixPresent: false });
+  });
+
+  it('falls back to toggling arming when no fix exists', () => {
+    assert.deepEqual(phasePlan('red', 'tax-rounding', false), {
+      armedBugs: ['tax-rounding'],
+      fixPresent: false,
+    });
+    assert.deepEqual(phasePlan('green', 'tax-rounding', false), {
+      armedBugs: [],
+      fixPresent: false,
+    });
+  });
+
+  it('leaves red and guard identical under the toggle fallback', () => {
+    // The limitation the source strategy exists to remove: with no fix, guard
+    // re-runs red's exact inputs and cannot test the fix.
+    assert.deepEqual(
+      phasePlan('red', 'tax-rounding', false),
+      phasePlan('guard', 'tax-rounding', false),
+    );
+    assert.notDeepEqual(
+      phasePlan('red', 'tax-rounding', true),
+      phasePlan('green', 'tax-rounding', true),
+    );
+  });
+});
+
+describe('judge: strategy-aware wording', () => {
+  it('describes guard as testing the fix only under the source strategy', () => {
+    const sourceGuard = judge('guard', outcome('failed', 'repro'), 'source');
+    assert.equal(sourceGuard.verdict, 'guarding');
+    assert.match(sourceGuard.reason, /Removing the fix/);
+
+    // Under toggle, guard must not claim to have tested anything beyond flakiness.
+    const toggleGuard = judge('guard', outcome('failed', 'repro'), 'toggle');
+    assert.equal(toggleGuard.verdict, 'guarding');
+    assert.match(toggleGuard.reason, /not flaky/);
+    assert.doesNotMatch(toggleGuard.reason, /Removing the fix/);
+  });
+
+  it('attributes green to the fix under the source strategy', () => {
+    assert.match(judge('green', outcome('passed', 'none'), 'source').reason, /with the fix applied/);
+    assert.match(judge('green', outcome('passed', 'none'), 'toggle').reason, /defect disarmed/);
   });
 });

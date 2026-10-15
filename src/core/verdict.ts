@@ -1,6 +1,7 @@
 import {
   REQUIRED_VERDICT,
   type FailureClass,
+  type FixStrategy,
   type Phase,
   type RunOutcome,
   type Verdict,
@@ -23,12 +24,20 @@ export interface Judgement {
  * passes while the defect is armed is actively misleading — it would be
  * committed as a regression guard that guards nothing.
  */
-export function judge(phase: Phase, outcome: RunOutcome): Judgement {
-  const judgement = evaluate(phase, outcome);
+export function judge(
+  phase: Phase,
+  outcome: RunOutcome,
+  strategy: FixStrategy = 'toggle',
+): Judgement {
+  const judgement = evaluate(phase, outcome, strategy);
   return { ...judgement, ok: judgement.verdict === REQUIRED_VERDICT[phase] };
 }
 
-function evaluate(phase: Phase, outcome: RunOutcome): Omit<Judgement, 'ok'> {
+function evaluate(
+  phase: Phase,
+  outcome: RunOutcome,
+  strategy: FixStrategy,
+): Omit<Judgement, 'ok'> {
   if (outcome.status === 'error' || outcome.status === 'no-tests') {
     return {
       verdict: 'inconclusive',
@@ -52,19 +61,15 @@ function evaluate(phase: Phase, outcome: RunOutcome): Omit<Judgement, 'ok'> {
           verdict: phase === 'red' ? 'vacuous' : 'not-guarding',
           reason:
             phase === 'red'
-              ? 'The test passed while the defect was armed, so it does not actually exercise the bug.'
-              : 'The defect was re-armed and the test still passed, so it would not catch this regression.',
+              ? 'The test passed with the defect in place, so it does not actually exercise the bug.'
+              : strategy === 'source'
+                ? 'The fix was removed and the test still passed, so it would not catch this regression.'
+                : 'The defect was re-armed and the test still passed, so it would not catch this regression.',
         };
       }
 
       if (failedAtRepro) {
-        return {
-          verdict: required,
-          reason:
-            phase === 'red'
-              ? 'The test failed at its repro assertion with the defect armed: the bug is reproduced.'
-              : 'The test failed again once the defect was re-armed: it is a working regression detector.',
-        };
+        return { verdict: required, reason: provenReason(phase, strategy) };
       }
 
       return {
@@ -77,7 +82,10 @@ function evaluate(phase: Phase, outcome: RunOutcome): Omit<Judgement, 'ok'> {
       if (outcome.status === 'passed') {
         return {
           verdict: 'fixed',
-          reason: 'With the defect disarmed the test passed: the fix resolves the reported behaviour.',
+          reason:
+            strategy === 'source'
+              ? 'The test passed with the fix applied: the fix resolves the reported behaviour.'
+              : 'With the defect disarmed the test passed: the reported behaviour is resolved.',
         };
       }
 
@@ -89,6 +97,25 @@ function evaluate(phase: Phase, outcome: RunOutcome): Omit<Judgement, 'ok'> {
       };
     }
   }
+}
+
+/**
+ * Why a red or guard failure counts as proof.
+ *
+ * Under the toggle strategy guard re-runs red's exact inputs, so it cannot claim
+ * to have tested the fix — saying otherwise would be the same overclaiming the
+ * verdict engine exists to prevent.
+ */
+function provenReason(phase: Phase, strategy: FixStrategy): string {
+  if (phase === 'red') {
+    return strategy === 'source'
+      ? 'The test failed at its repro assertion with the fix set aside: the bug is reproduced.'
+      : 'The test failed at its repro assertion with the defect armed: the bug is reproduced.';
+  }
+
+  return strategy === 'source'
+    ? 'Removing the fix brought the failure back, so the test will catch this regression.'
+    : 'The test failed again with the defect re-armed. This repeats red\'s inputs, so it establishes only that the test is not flaky.';
 }
 
 /** Human-readable gloss on a non-repro failure class. */
