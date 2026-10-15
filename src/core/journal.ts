@@ -16,6 +16,8 @@ export function createJournal(ticket: Ticket, specPath: string | null): RunJourn
     ticketUrl: ticket.url,
     specPath,
     seededBug: ticket.repro.seededBug,
+    strategy: 'toggle',
+    fixFiles: [],
     phases: {},
     certified: false,
     updatedAt: new Date().toISOString(),

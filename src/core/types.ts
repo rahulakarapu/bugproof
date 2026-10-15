@@ -91,9 +91,21 @@ export type Verdict =
   /** Could not determine anything useful. */
   | 'inconclusive';
 
+/**
+ * How the difference between "buggy" and "fixed" is produced.
+ *
+ * `source` is the real thing: a fix in the working tree, present for green and
+ * set aside for red and guard. `toggle` is the demo fallback used when no fix has
+ * been written — it varies the seeded defect flag instead, which leaves red and
+ * guard running identical inputs, so guard proves only that the test is not flaky.
+ */
+export type FixStrategy = 'source' | 'toggle';
+
 export interface PhaseRecord {
   phase: Phase;
   verdict: Verdict;
+  /** Whether the source fix was in the tree for this run. */
+  fixPresent: boolean;
   /** True when the verdict is the one this phase requires to proceed. */
   ok: boolean;
   /** Human-readable justification, produced once by the verdict engine. */
@@ -110,6 +122,9 @@ export interface RunJournal {
   ticketUrl: string | null;
   specPath: string | null;
   seededBug: string | null;
+  strategy: FixStrategy;
+  /** Files the verified fix touched, carried into the pull request. */
+  fixFiles: string[];
   phases: Partial<Record<Phase, PhaseRecord>>;
   /** True only when red, green, and guard all returned their required verdict. */
   certified: boolean;

@@ -1,7 +1,7 @@
 import { readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { findSeededBug } from './bugs.ts';
-import { PHASES, type Phase, type PhaseRecord, type RunJournal } from './types.ts';
+import { PHASES, type FixStrategy, type Phase, type PhaseRecord, type RunJournal } from './types.ts';
 import { remediation } from './verdict.ts';
 import { ensureDir, paths, relative } from '../util/paths.ts';
 
@@ -52,10 +52,17 @@ function describe(path: string): string {
   return 'artifact';
 }
 
-const PHASE_BLURB: Record<Phase, string> = {
-  red: 'defect armed — the test must fail',
-  green: 'defect disarmed — the test must pass',
-  guard: 'defect re-armed — the test must fail again',
+const BLURBS: Record<FixStrategy, Record<Phase, string>> = {
+  source: {
+    red: 'fix absent — the test must fail',
+    green: 'fix applied — the test must pass',
+    guard: 'fix removed again — the test must fail',
+  },
+  toggle: {
+    red: 'defect armed — the test must fail',
+    green: 'defect disarmed — the test must pass',
+    guard: 'defect re-armed — the test must fail again',
+  },
 };
 
 const MARK: Record<string, string> = {
@@ -93,27 +100,40 @@ export async function renderReport(journal: RunJournal): Promise<string> {
     const bug = findSeededBug(journal.seededBug);
     lines.push(`**Defect under test:** \`${journal.seededBug}\`${bug ? ` — ${bug.rootCause}` : ''}`);
   }
+  if (journal.strategy === 'source' && journal.fixFiles.length > 0) {
+    lines.push(`**Fix under test:** \`${journal.fixFiles.join('`, `')}\``);
+  }
   lines.push('');
 
+  const blurb = BLURBS[journal.strategy];
   lines.push('| Phase | Condition | Run | Verdict |');
   lines.push('| --- | --- | --- | --- |');
   for (const phase of PHASES) {
     const record = journal.phases[phase];
     if (!record) {
-      lines.push(`| \`${phase}\` | ${PHASE_BLURB[phase]} | — | not run |`);
+      lines.push(`| \`${phase}\` | ${blurb[phase]} | — | not run |`);
       continue;
     }
     lines.push(
-      `| \`${phase}\` | ${PHASE_BLURB[phase]} | ${statusWord(record)} | ${MARK[record.verdict] ?? ''} ${record.verdict} |`,
+      `| \`${phase}\` | ${blurb[phase]} | ${statusWord(record)} | ${MARK[record.verdict] ?? ''} ${record.verdict} |`,
     );
   }
   lines.push('');
 
   if (journal.certified) {
     lines.push(
-      'The test was proven to fail on the reported defect, pass once it was fixed, and fail again when the defect was reintroduced. It is safe to keep as a permanent regression guard.',
+      journal.strategy === 'source'
+        ? 'The test failed without the fix, passed with it applied, and failed again once it was removed. Both the fix and the test are verified, and the test is safe to keep as a permanent regression guard.'
+        : 'The test failed with the defect armed and passed with it disarmed, so it is sensitive to the reported behaviour.',
       '',
     );
+
+    if (journal.strategy === 'toggle') {
+      lines.push(
+        '> **Caveat:** no source fix was present, so this cycle toggled a seeded defect flag instead. The guard phase re-ran red\'s exact inputs and therefore only establishes that the test is not flaky.',
+        '',
+      );
+    }
   }
 
   for (const phase of PHASES) {

@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { commitCommand } from './commands/commit.ts';
 import { evidenceCommand } from './commands/evidence.ts';
 import { fetchCommand } from './commands/fetch.ts';
+import { prCommand } from './commands/pr.ts';
 import { scaffoldCommand } from './commands/scaffold.ts';
 import { bugsCommand, listTicketsCommand, statusCommand } from './commands/status.ts';
 import { verifyCommand } from './commands/verify.ts';
@@ -40,10 +41,11 @@ program
   .option('-p, --phase <phase>', 'red, green, guard, or all', 'all')
   .option('--arm <bugs>', 'override armed defects (comma separated, empty string for none)')
   .option('--keep-going', 'run later phases even after one fails its requirement')
+  .option('--ignore-fix', 'ignore a working-tree fix and toggle the seeded defect instead')
   .action(
     async (
       ticketId: string,
-      options: { phase: string; arm?: string; keepGoing?: boolean },
+      options: { phase: string; arm?: string; keepGoing?: boolean; ignoreFix?: boolean },
     ) => {
       const journal = await verifyCommand(ticketId, options);
       // Non-zero exit lets CI gate on certification.
@@ -58,6 +60,17 @@ program
   .option('--post', 'publish the report as a ticket comment')
   .action(async (ticketId: string, options: { post?: boolean }) => {
     await evidenceCommand(ticketId, options);
+  });
+
+program
+  .command('pr')
+  .description('Open a pull request containing the regression test and the fix, leaving the base branch untouched')
+  .argument('<ticketId>')
+  .option('-b, --base <branch>', 'base branch for the pull request (defaults to the current branch)')
+  .option('-d, --draft', 'open the pull request as a draft')
+  .option('-f, --force', 'open it even if the cycle is not certified')
+  .action(async (ticketId: string, options: { base?: string; draft?: boolean; force?: boolean }) => {
+    await prCommand(ticketId, options);
   });
 
 program
