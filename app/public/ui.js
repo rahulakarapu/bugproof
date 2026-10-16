@@ -88,7 +88,7 @@ function renderLines() {
     const lineTotal = document.createElement('span');
     lineTotal.className = 'price';
     lineTotal.dataset.testid = `line-total-${line.sku}`;
-    lineTotal.textContent = formatMoney(line.cents);
+    lineTotal.textContent = formatMoney(line.cents * line.qty);
 
     li.append(name, qty, lineTotal);
     list.append(li);
